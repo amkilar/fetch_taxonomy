@@ -1,0 +1,7 @@
+name: datasets-env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - ncbi-datasets-cli
+  - jq
