@@ -14,8 +14,8 @@ os.makedirs(OUTPUT_TAXONOMY, exist_ok=True)
 ###############################################################################
 rule all:
     input:
-        # The pipeline is complete when we have the final merged table
-        f"{OUTPUT_TAXONOMY}/{OUTPUT_TAXONOMY_NAME}_taxonomy_table.tsv"
+        f"{OUTPUT_TAXONOMY}/{OUTPUT_TAXONOMY_NAME}_taxonomy_table.tsv",
+        f"{OUTPUT_TAXONOMY}/taxonomy_creation.log"
 
 
 ###############################################################################
@@ -170,6 +170,67 @@ rule clean_taxonomy_output:
         sed '/^$/d' | \
         sed 's/^ *//' > {output}
         """
+
+###############################################################################
+# Rule: organize by taxonomy
+# Use taxonomy file to move genome into a folder corresponding to its taxonomy
+###############################################################################
+
+rule organize_by_taxonomy:
+    """
+    Create symbolic links for genome files based on their taxonomy (Kingdom/Phylum/Class/Order/Family).
+    """
+    input:
+        genome_file = f"{INPUT_GENOMES}/{{accession}}/{{accession}}_genomic.fna",
+        taxonomy_file = f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxonomy.tsv"
+    output:
+        temp(f"{OUTPUT_TAXONOMY}/organized/{{accession}}/linked.flag")  # Mark as temporary
+    run:
+        import os
+        import pandas as pd
+
+        # Load taxonomy information
+        taxonomy = pd.read_csv(input.taxonomy_file, sep='\t', header=None)
+        taxonomy.columns = ['tax_id', 'scientific_name', 'rank', 'kingdom', 'phylum', 'class', 'order', 'family']
+
+        # Extract taxonomy levels (replace 'NA' with 'Unknown')
+        kingdom = taxonomy['kingdom'].values[0] if pd.notna(taxonomy['kingdom'].values[0]) else 'Unknown_Kingdom'
+        phylum = taxonomy['phylum'].values[0] if pd.notna(taxonomy['phylum'].values[0]) else 'Unknown_Phylum'
+        class_ = taxonomy['class'].values[0] if pd.notna(taxonomy['class'].values[0]) else 'Unknown_Class'
+        order = taxonomy['order'].values[0] if pd.notna(taxonomy['order'].values[0]) else 'Unknown_Order'
+        family = taxonomy['family'].values[0] if pd.notna(taxonomy['family'].values[0]) else 'Unknown_Family'
+
+        # Create taxonomy-guided directory path
+        taxonomy_path = os.path.join(OUTPUT_TAXONOMY, "organized", kingdom, phylum, class_, order, family)
+        os.makedirs(taxonomy_path, exist_ok=True)
+
+        # Create symbolic link pointing to the original genome file
+        symlink_path = os.path.join(taxonomy_path, f"{wildcards.accession}_genomic.fna")
+        if not os.path.exists(symlink_path):
+            os.symlink(os.path.abspath(input.genome_file), symlink_path)
+
+        # Create a temporary flag file to mark the symlink creation
+        with open(output[0], 'w') as f:
+            f.write(f"Symlink created for {wildcards.accession} at {symlink_path}\n")
+
+###############################################################################
+# Rule: log_symlink_creation
+#    This rule will collect all symlink creation messages and write them to a single log file.
+###############################################################################
+rule log_symlink_creation:
+    """
+    Aggregate symlink creation statuses into a single log file.
+    """
+    input:
+        expand(f"{OUTPUT_TAXONOMY}/organized/{{accession}}/linked.flag", accession=get_accessions_from_checkpoint)
+    output:
+        log_file = f"{OUTPUT_TAXONOMY}/taxonomy_creation.log"
+    run:
+        with open(output.log_file, 'w') as logfile:
+            for temp_file in input:
+                with open(temp_file, 'r') as f:
+                    logfile.write(f.read())
+        print(f"Symlink creation log written to {output.log_file}")
 
 
 ###############################################################################
