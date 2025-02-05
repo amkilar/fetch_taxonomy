@@ -14,6 +14,40 @@ This Snakemake pipeline automates the process of fetching Taxonomic IDs (TaxIDs)
 
 ---
 
+## **Input Requirements**
+
+**Input Genomes**:  
+The tool requires a directory containing genome assemblies, structured as follows:
+
+```text
+/ genomes
+│   ├── GCA_000006805.1
+│   │   ├── GCA_000006805.1_ASM680v1_genomic.fna
+│   │   └── GCA_000006805.1_ASM680v1_genomic.fna_accessions.txt
+│   ├── GCA_000007005.1
+│   │   ├── GCA_000007005.1_ASM700v1_genomic.fna
+│   │   └── GCA_000007005.1_ASM700v1_genomic.fna_accessions.txt
+│   ├── GCA_000007065.1
+│   │   ├── GCA_000007065.1_ASM706v1_genomic.fna
+│   │   └── GCA_000007065.1_ASM706v1_genomic.fna_accessions.txt
+│   ├── GCA_000007185.1
+│   │   ├── GCA_000007185.1_ASM718v1_genomic.fna
+│   │   └── GCA_000007185.1_ASM718v1_genomic.fna_accessions.txt
+│   ├── GCA_000007225.1
+│   │   ├── GCA_000007225.1_ASM722v1_genomic.fna
+│   │   └── GCA_000007225.1_ASM722v1_genomic.fna_accessions.txt
+│   ├── GCA_000007305.1
+│   │   ├── GCA_000007305.1_ASM730v1_genomic.fna
+│   │   └── GCA_000007305.1_ASM730v1_genomic.fna_accessions.txt
+...
+```
+**Directory Structure Details**
+- Root Directory (/genomes):
+This is the main directory containing subdirectories for each genome assembly.
+- Genome Assembly Subdirectories (GCA_XXXXXXXXX.X):
+Each subdirectory should be named according to the genome accession number (e.g., GCA_000006805.1).
+---
+
 ## Usage
 
 Run the pipeline with the following command:
@@ -22,10 +56,10 @@ Run the pipeline with the following command:
 snakemake --snakefile path/to/fetch_taxonomy.smk \
     --cores 8 \
     --use-conda \
-    --config  HOME_DIR=/path/to/your/home \
-  INPUT_GENOMES=/path/to/genome/directories \
-  OUTPUT_TAXONOMY=/path/to/save/output \
-  OUTPUT_TAXONOMY_NAME=desired_output_filename
+    --config  HOME_DIR=/path/to/fetch_taxonomy/repository \
+    INPUT_GENOMES=/path/to/genome/directory \
+    OUTPUT_TAXONOMY=/path/to/save/output/taxonomy \
+    OUTPUT_TAXONOMY_NAME=desired_output_filename
 ```
 
 ---
@@ -88,11 +122,14 @@ This TSV file will contain the following columns:
 
 ---
 
-## Dependencies
+## **Dependencies**
 
 - **Python 3.6+**
 - **Snakemake**
 - **Mamba** for managing environments
+
+The pipeline automatically installs the following dependencies, so you don't need to install them manually:
+
 - **jq** for JSON parsing in shell scripts
 - NCBI **datasets** CLI tool
 
