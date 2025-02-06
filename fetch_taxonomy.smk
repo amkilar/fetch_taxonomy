@@ -188,35 +188,21 @@ rule organize_by_taxonomy:
     run:
         import os
         import pandas as pd
+        import glob
 
-        # Validate input
-        if not input.genome_file:
-            print(f"Genome file for {wildcards.accession} is missing. Skipping.")
+        # Validate input and find the correct genome file
+        genome_files = glob.glob(f"{INPUT_GENOMES}/{wildcards.accession}/*_genomic.fna")
+        
+        if not genome_files:
+            print(f"Genome file for {wildcards.accession} is missing or not a `.fna` file. Skipping.")
             with open(output[0], 'w') as f:
-                f.write(f"Skipped {wildcards.accession} due to missing genome file.\n")
+                f.write(f"Skipped {wildcards.accession} due to missing or incorrect genome file.\n")
             return
 
-        # Load taxonomy information, skipping the header row
-        try:
-            taxonomy = pd.read_csv(input.taxonomy_file, sep='\t', header=0)  # Use first row as header
-        except Exception as e:
-            print(f"Error reading taxonomy file {input.taxonomy_file}: {e}")
-            with open(output[0], 'w') as f:
-                f.write(f"Skipped {wildcards.accession} due to unreadable taxonomy file.\n")
-            return
+        # Load taxonomy information
+        taxonomy = pd.read_csv(input.taxonomy_file, sep='\t', header=0)
 
-        # Expected columns
-        expected_columns = ['tax_id', 'scientific_name', 'rank', 'kingdom', 'phylum', 'class', 'order', 'family']
-
-        # Verify that the required columns exist
-        missing_columns = [col for col in expected_columns if col not in taxonomy.columns]
-        if missing_columns:
-            print(f"Warning: Missing columns {missing_columns} in {input.taxonomy_file}. Skipping.")
-            with open(output[0], 'w') as f:
-                f.write(f"Skipped {wildcards.accession} due to missing taxonomy columns.\n")
-            return
-
-        # Extract taxonomy levels (replace 'NA' or missing values with 'Unknown')
+        # Extract taxonomy levels
         def get_value(column_name):
             return taxonomy[column_name].values[0] if column_name in taxonomy.columns and pd.notna(taxonomy[column_name].values[0]) else f"Unknown_{column_name.capitalize()}"
 
@@ -226,16 +212,18 @@ rule organize_by_taxonomy:
         order = get_value('order')
         family = get_value('family')
 
-        # Construct directory structure based on taxonomy
+        # Construct taxonomy-based directory
         taxonomy_path = os.path.join(OUTPUT_TAXONOMY, "organized", kingdom, phylum, class_, order, family)
         os.makedirs(taxonomy_path, exist_ok=True)
 
-        # Create symbolic link pointing to the original genome file
-        symlink_path = os.path.join(taxonomy_path, f"{wildcards.accession}_genomic.fna")
-        if not os.path.exists(symlink_path):
-            os.symlink(os.path.abspath(input.genome_file), symlink_path)
+        # Ensure we only link `.fna` files
+        for genome_file in genome_files:
+            accession_name = os.path.basename(genome_file)
+            symlink_path = os.path.join(taxonomy_path, accession_name)
+            if not os.path.exists(symlink_path):
+                os.symlink(os.path.abspath(genome_file), symlink_path)
 
-        # Create a flag file to mark the symlink creation
+        # Create a flag file to mark symlink creation
         with open(output[0], 'w') as f:
             f.write(f"Symlink created for {wildcards.accession} at {symlink_path}\n")
 
