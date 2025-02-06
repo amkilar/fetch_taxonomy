@@ -181,26 +181,52 @@ rule organize_by_taxonomy:
     Create symbolic links for genome files based on their taxonomy (Kingdom/Phylum/Class/Order/Family).
     """
     input:
-        genome_file = f"{INPUT_GENOMES}/{{accession}}/{{accession}}_genomic.fna",
-        taxonomy_file = f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxonomy.tsv"
+        genome_file = lambda wc: checkpoints.list_accessions.get().output.assemblies,
+        taxonomy_file = f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxonomy_cleaned.tsv"
     output:
-        temp(f"{OUTPUT_TAXONOMY}/organized/{{accession}}/linked.flag")  # Mark as temporary
+        temp(f"{OUTPUT_TAXONOMY}/organized/{{accession}}/linked.flag")
     run:
         import os
         import pandas as pd
 
-        # Load taxonomy information
-        taxonomy = pd.read_csv(input.taxonomy_file, sep='\t', header=None)
-        taxonomy.columns = ['tax_id', 'scientific_name', 'rank', 'kingdom', 'phylum', 'class', 'order', 'family']
+        # Validate input
+        if not input.genome_file:
+            print(f"Genome file for {wildcards.accession} is missing. Skipping.")
+            with open(output[0], 'w') as f:
+                f.write(f"Skipped {wildcards.accession} due to missing genome file.\n")
+            return
 
-        # Extract taxonomy levels (replace 'NA' with 'Unknown')
-        kingdom = taxonomy['kingdom'].values[0] if pd.notna(taxonomy['kingdom'].values[0]) else 'Unknown_Kingdom'
-        phylum = taxonomy['phylum'].values[0] if pd.notna(taxonomy['phylum'].values[0]) else 'Unknown_Phylum'
-        class_ = taxonomy['class'].values[0] if pd.notna(taxonomy['class'].values[0]) else 'Unknown_Class'
-        order = taxonomy['order'].values[0] if pd.notna(taxonomy['order'].values[0]) else 'Unknown_Order'
-        family = taxonomy['family'].values[0] if pd.notna(taxonomy['family'].values[0]) else 'Unknown_Family'
+        # Load taxonomy information, skipping the header row
+        try:
+            taxonomy = pd.read_csv(input.taxonomy_file, sep='\t', header=0)  # Use first row as header
+        except Exception as e:
+            print(f"Error reading taxonomy file {input.taxonomy_file}: {e}")
+            with open(output[0], 'w') as f:
+                f.write(f"Skipped {wildcards.accession} due to unreadable taxonomy file.\n")
+            return
 
-        # Create taxonomy-guided directory path
+        # Expected columns
+        expected_columns = ['tax_id', 'scientific_name', 'rank', 'kingdom', 'phylum', 'class', 'order', 'family']
+
+        # Verify that the required columns exist
+        missing_columns = [col for col in expected_columns if col not in taxonomy.columns]
+        if missing_columns:
+            print(f"Warning: Missing columns {missing_columns} in {input.taxonomy_file}. Skipping.")
+            with open(output[0], 'w') as f:
+                f.write(f"Skipped {wildcards.accession} due to missing taxonomy columns.\n")
+            return
+
+        # Extract taxonomy levels (replace 'NA' or missing values with 'Unknown')
+        def get_value(column_name):
+            return taxonomy[column_name].values[0] if column_name in taxonomy.columns and pd.notna(taxonomy[column_name].values[0]) else f"Unknown_{column_name.capitalize()}"
+
+        kingdom = get_value('kingdom')
+        phylum = get_value('phylum')
+        class_ = get_value('class')
+        order = get_value('order')
+        family = get_value('family')
+
+        # Construct directory structure based on taxonomy
         taxonomy_path = os.path.join(OUTPUT_TAXONOMY, "organized", kingdom, phylum, class_, order, family)
         os.makedirs(taxonomy_path, exist_ok=True)
 
@@ -209,9 +235,11 @@ rule organize_by_taxonomy:
         if not os.path.exists(symlink_path):
             os.symlink(os.path.abspath(input.genome_file), symlink_path)
 
-        # Create a temporary flag file to mark the symlink creation
+        # Create a flag file to mark the symlink creation
         with open(output[0], 'w') as f:
             f.write(f"Symlink created for {wildcards.accession} at {symlink_path}\n")
+
+        print(f"Symlink created for {wildcards.accession}: {symlink_path}")
 
 ###############################################################################
 # Rule: log_symlink_creation
