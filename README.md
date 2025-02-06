@@ -128,6 +128,17 @@ This TSV file will contain the following columns:
 - Hierarchically structured based on taxonomy **without duplicating genome files**.
 
 
+## Working with Symbolic Links
+The pipeline creates **taxonomy-based symlinks** to organize genome files without duplicating data. These links allow flexible querying of genome files while keeping the original data in `/genomes/`.
+
+
+### **Example: List all genomes under a specific taxonomic group**
+If you want to merge all genomes for **Primates** into one file:
+
+```bash
+cat /ordered/organized/Metazoa/Chordata/Mammalia/Primates/Hominidae/*_genomic.fna > primates_genomes.fasta
+```
+
 
 ---
 
