@@ -1,6 +1,6 @@
 # Taxonomy Retrieval Pipeline
 
-This Snakemake pipeline automates the process of fetching Taxonomic IDs (TaxIDs) and detailed taxonomy information for a set of genome assemblies from NCBI Datasets. The final output is a comprehensive TSV file containing taxonomy information for each assembly.
+This Snakemake pipeline automates the process of fetching Taxonomic IDs (TaxIDs) and detailed taxonomy information for a set of genome assemblies from NCBI Datasets. The final output is a comprehensive TSV file containing taxonomy information for each assembly. Additionally, it organizes genome files into a **taxonomy-guided hierarchy** using symbolic links, ensuring efficient storage without duplication.
 
 ---
 
@@ -10,7 +10,8 @@ This Snakemake pipeline automates the process of fetching Taxonomic IDs (TaxIDs)
 2. **Fetch TaxIDs**: Retrieves TaxIDs for each genome using NCBI Datasets.
 3. **Fetch Taxonomy**: Fetches detailed taxonomy information using the retrieved TaxIDs.
 4. **Clean Output**: Processes and cleans the taxonomy data.
-5. **Merge Results**: Combines all taxonomy information into a final TSV file.
+5. **Organize by Taxonomy**: Creates a hierarchical folder structure based on taxonomy levels (Kingdom, Phylum, Class, Order, Family) using **symlinks**.
+6. **Merge Results**: Combines all taxonomy information into a final TSV file.
 
 ---
 
@@ -78,6 +79,22 @@ Uses the retrieved TaxID to fetch detailed taxonomy information (e.g., kingdom, 
 ### 4. **`clean_taxonomy_output`**
 Cleans the taxonomy output by removing JSON artifacts and formatting it as a TSV.
 
+### 5. **`organize_by_taxonomy`**
+Creates symbolic links in a taxonomy-guided folder structure without duplicating genome files.
+
+Directory structure example:
+```text
+/ordered/organized/
+├── Metazoa
+│   ├── Chordata
+│   │   ├── Aves
+│   │   │   ├── Galliformes
+│   │   │   │   ├── Phasianidae
+│   │   │   │   │   ├── GCA_016699485.1_genomic.fna -> /genomes/GCA_016699485.1/GCA_016699485.1_genomic.fna
+│   │   │   │   │   ├── GCA_00001735.2_genomic.fna -> /genomes/GCA_00001735.2/GCA_00001735.2_genomic.fna
+│   │   │   │   │   └── GCA_034140825.1_genomic.fna -> /genomes/GCA_034140825.1/GCA_034140825.1_genomic.fna
+```
+
 ### 5. **`merge_results`**
 Merges all cleaned taxonomy files into a final comprehensive TSV file.
 
@@ -88,7 +105,7 @@ Specifies the final output of the pipeline to ensure all steps are executed.
 
 ## Output
 
-The final output file will be located at:
+**The final output file will be located at**:
 
 ```
 /output/path/{OUTPUT_TAXONOMY_NAME}_taxonomy_table.tsv
@@ -104,6 +121,13 @@ This TSV file will contain the following columns:
 - `class`
 - `order`
 - `family`
+
+
+**Organized Genome Files (Symlinks)**
+- Located in `/ordered/organized/`
+- Hierarchically structured based on taxonomy **without duplicating genome files**.
+
+
 
 ---
 
