@@ -5,9 +5,13 @@ HOME_DIR = config["HOME_DIR"]
 INPUT_GENOMES = config["INPUT_GENOMES"]
 OUTPUT_TAXONOMY = config["OUTPUT_TAXONOMY"]
 OUTPUT_TAXONOMY_NAME = config["OUTPUT_TAXONOMY_NAME"]
+NCBI_API_KEY = config.get("ncbi_api_key", "")
 
 os.makedirs(OUTPUT_TAXONOMY, exist_ok=True)
 
+
+if not NCBI_API_KEY:
+    print("Warning: No NCBI API key found! Limiting requests to 5 at a time. Set `ncbi_api_key` in config.yaml to increase the limit to 10.")
 
 ###############################################################################
 # rule all
@@ -16,7 +20,6 @@ rule all:
     input:
         f"{OUTPUT_TAXONOMY}/{OUTPUT_TAXONOMY_NAME}_taxonomy_table.tsv",
         f"{OUTPUT_TAXONOMY}/taxonomy_creation.log"
-
 
 ###############################################################################
 # CHECKPOINT: list_accessions
@@ -66,31 +69,57 @@ rule fetch_taxid:
     # Because we have a wildcard {accession}, Snakemake will create a job
     # for each item returned by get_accessions_from_checkpoint.
     input:
-        # ensures we wait for the checkpoint
         assemblies=lambda wc: checkpoints.list_accessions.get().output.assemblies
     output:
-        # one file per accession
         f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxid.tsv"
+    params:
+        api_key = NCBI_API_KEY
     conda:
         f"{HOME_DIR}/env/ncbi-datasets.yaml"
     shell:
         """
-        datasets summary genome accession {wildcards.accession} \
-        | jq -r '
-            if .reports then
-                (
-                .reports[]
-                | [
-                    (.accession // "NA"),
-                    (.organism.tax_id // "NA"),
-                    (.organism.organism_name // "NA")
-                    ]
-                | @tsv
-                )
-            else
-                "{wildcards.accession}\tNA\tNA"
-            end
-        ' > {output}
+        if [ -n "{params.api_key}" ]; then
+
+            sleep $(awk -v min=0.5 -v max=2 'BEGIN{{srand(); print min+rand()*(max-min)}}')
+
+            echo "Using API key for NCBI Datasets: {params.api_key}"
+            datasets summary genome accession {wildcards.accession} --api-key {params.api_key} \
+            | jq -r '
+                if .reports then
+                    (
+                    .reports[]
+                    | [
+                        (.accession // "NA"),
+                        (.organism.tax_id // "NA"),
+                        (.organism.organism_name // "NA")
+                        ]
+                    | @tsv
+                    )
+                else
+                    "{wildcards.accession}\tNA\tNA"
+                end
+            ' > {output}
+        else
+
+            sleep $(awk -v min=0.5 -v max=5 'BEGIN{{srand(); print min+rand()*(max-min)}}')
+
+            datasets summary genome accession {wildcards.accession} \
+            | jq -r '
+                if .reports then
+                    (
+                    .reports[]
+                    | [
+                        (.accession // "NA"),
+                        (.organism.tax_id // "NA"),
+                        (.organism.organism_name // "NA")
+                        ]
+                    | @tsv
+                    )
+                else
+                    "{wildcards.accession}\tNA\tNA"
+                end
+            ' > {output}
+        fi
         """
 
 

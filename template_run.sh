@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -c 24               # Number of cores for the main job
+#SBATCH -c 12               # Number of cores for the main job
 #SBATCH --mem=32G            # Memory pool for the main job
 #SBATCH -J taxonomy             # Name of the main batch job
 #SBATCH -o /n/eddy_lab/users/akilar/fetch_taxonomy/%A_%a.out
@@ -13,9 +13,11 @@ module add Miniforge3/24.7.1-fasrc01
 mamba activate /n/home10/akilar/software/env_snakemake
 
 snakemake --snakefile /n/eddy_lab/users/akilar/fetch_taxonomy/fetch_taxonomy.smk \
-    --cores 24 \
+    --cores 12 \
     --use-conda \
     --config HOME_DIR=/n/eddy_lab/users/akilar/fetch_taxonomy \
     INPUT_GENOMES=/n/eddy_lab/data/RNAhub_genomes/Vertebrate_reference_genomes/genomes \
     OUTPUT_TAXONOMY=/n/eddy_lab/users/akilar/fetch_taxonomy/Verterbrates \
-    OUTPUT_TAXONOMY_NAME=Verterbrates  # for example: plants
+    OUTPUT_TAXONOMY_NAME=Verterbrates  \
+    ncbi_api_key=55d74cdd9fb0d170b8cdb6fa59056bd57309 \
+    --rerun-incomplete
