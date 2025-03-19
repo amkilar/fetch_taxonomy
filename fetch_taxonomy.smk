@@ -33,7 +33,7 @@ checkpoint list_accessions:
         with open(output[0], 'w') as outfile:
             for dirname in os.listdir(input.directory):
                 dirpath = os.path.join(input.directory, dirname)
-                if os.path.isdir(dirpath) and dirname.startswith("GCA_"):
+                if os.path.isdir(dirpath) and (dirname.startswith("GCA_") or dirname.startswith("GCF_")):
                     outfile.write(dirname + '\n')
                     print(f"Found assembly: {dirname}")
 
@@ -75,9 +75,6 @@ rule fetch_taxid:
         f"{HOME_DIR}/env/ncbi-datasets.yaml"
     shell:
         """
-        # Note: This shell snippet tries to fetch the TaxID for {wildcards.accession}.
-        # If your directory name is truly an NCBI assembly accession (e.g. 'GCA_...'),
-        # this works. If it's something else, you may need a fallback or custom logic.
         datasets summary genome accession {wildcards.accession} \
         | jq -r '
             if .reports then

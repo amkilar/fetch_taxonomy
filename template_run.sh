@@ -1,15 +1,21 @@
 #!/bin/bash
-#SBATCH -c 12               # Number of cores for the main job
-#SBATCH --mem=8G            # Memory pool for the main job
-#SBATCH -J test             # Name of the main batch job
+#SBATCH -c 24               # Number of cores for the main job
+#SBATCH --mem=32G            # Memory pool for the main job
+#SBATCH -J taxonomy             # Name of the main batch job
+#SBATCH -o /n/eddy_lab/users/akilar/fetch_taxonomy/%A_%a.out
+#SBATCH -e /n/eddy_lab/users/akilar/fetch_taxonomy/%A_%a.err
 
-module add Mambaforge
-mamba activate snakemake
 
-snakemake --snakefile /path/to/repository/fetch_taxonomy/fetch_taxonomy.smk \
-    --cores 12 \
+mkdir -p /n/eddy_lab/users/akilar/fetch_taxonomy/Verterbrates
+
+#module add Mambaforge
+module add Miniforge3/24.7.1-fasrc01
+mamba activate /n/home10/akilar/software/env_snakemake
+
+snakemake --snakefile /n/eddy_lab/users/akilar/fetch_taxonomy/fetch_taxonomy.smk \
+    --cores 24 \
     --use-conda \
-    --config HOME_DIR=/path/to/repository/fetch_taxonomy/ \
-    INPUT_GENOMES=/path/to/directory/with/genome/assemblie \
-    OUTPUT_TAXONOMY=/path/where/you/want/to/see/your/output/table \
-    OUTPUT_TAXONOMY_NAME=table_name  # for example: plants
+    --config HOME_DIR=/n/eddy_lab/users/akilar/fetch_taxonomy \
+    INPUT_GENOMES=/n/eddy_lab/data/RNAhub_genomes/Vertebrate_reference_genomes/genomes \
+    OUTPUT_TAXONOMY=/n/eddy_lab/users/akilar/fetch_taxonomy/Verterbrates \
+    OUTPUT_TAXONOMY_NAME=Verterbrates  # for example: plants
