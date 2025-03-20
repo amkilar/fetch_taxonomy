@@ -15,6 +15,18 @@ module add Miniforge3/24.7.1-fasrc01
 mamba activate /n/home10/akilar/software/env_snakemake
 
 snakemake --snakefile /n/eddy_lab/users/akilar/fetch_taxonomy/fetch_taxonomy.smk \
+    --cores 12 \
+    --use-conda \
+    --config HOME_DIR=/n/eddy_lab/users/akilar/fetch_taxonomy \
+    INPUT_GENOMES=/n/eddy_lab/data/RNAhub_genomes/Vertebrate_reference_genomes/genomes \
+    OUTPUT_TAXONOMY=/n/eddy_lab/users/akilar/fetch_taxonomy/Verterbrates \
+    OUTPUT_TAXONOMY_NAME=Verterbrates  \
+    ncbi_api_key=insert_your_NCBI_api_key OR remove the line \
+
+
+######### IN A CASE THE PIPELINE FAILED, RERUN THE PIPELINE WITH THE FOLLOWING COMMANDS #########
+
+snakemake --snakefile /n/eddy_lab/users/akilar/fetch_taxonomy/fetch_taxonomy.smk \
     --cores 1 \
     --use-conda \
     --config HOME_DIR=/n/eddy_lab/users/akilar/fetch_taxonomy \
@@ -22,15 +34,16 @@ snakemake --snakefile /n/eddy_lab/users/akilar/fetch_taxonomy/fetch_taxonomy.smk
     OUTPUT_TAXONOMY=/n/eddy_lab/users/akilar/fetch_taxonomy/Verterbrates \
     OUTPUT_TAXONOMY_NAME=Verterbrates  \
     --unlock
-    #ncbi_api_key=55d74cdd9fb0d170b8cdb6fa59056bd57309 \
 
 
-    snakemake --snakefile /n/eddy_lab/users/akilar/fetch_taxonomy/fetch_taxonomy.smk \
+snakemake --snakefile /n/eddy_lab/users/akilar/fetch_taxonomy/fetch_taxonomy.smk \
     --cores 12 \
     --use-conda \
     --config HOME_DIR=/n/eddy_lab/users/akilar/fetch_taxonomy \
     INPUT_GENOMES=/n/eddy_lab/data/RNAhub_genomes/Vertebrate_reference_genomes/genomes \
     OUTPUT_TAXONOMY=/n/eddy_lab/users/akilar/fetch_taxonomy/Verterbrates \
-    OUTPUT_TAXONOMY_NAME=Verterbrates  \
-    ncbi_api_key=55d74cdd9fb0d170b8cdb6fa59056bd57309 \
+    OUTPUT_TAXONOMY_NAME=Verterbrates \
+    ncbi_api_key=insert_your_NCBI_api_key OR remove the line \
+    --rerun-incomplete
+
 
