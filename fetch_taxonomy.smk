@@ -80,7 +80,7 @@ rule fetch_taxid:
         """
         if [ -n "{params.api_key}" ]; then
 
-            sleep $(awk -v min=0.5 -v max=2 'BEGIN{{srand(); print min+rand()*(max-min)}}')
+            sleep $(awk -v min=0.5 -v max=15 'BEGIN{{srand(); print min+rand()*(max-min)}}')
 
             echo "Using API key for NCBI Datasets: {params.api_key}"
             datasets summary genome accession {wildcards.accession} --api-key {params.api_key} \
@@ -101,7 +101,7 @@ rule fetch_taxid:
             ' > {output}
         else
 
-            sleep $(awk -v min=0.5 -v max=5 'BEGIN{{srand(); print min+rand()*(max-min)}}')
+            sleep $(awk -v min=1 -v max=30 'BEGIN{{srand(); print min+rand()*(max-min)}}')
 
             datasets summary genome accession {wildcards.accession} \
             | jq -r '
@@ -129,11 +129,14 @@ rule fetch_taxid:
 rule fetch_taxonomy:
     """
     Given the TaxID for each accession, fetch the detailed taxonomy info.
+    Sleeps in seconds.
     """
     input:
         taxid_info = f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxid.tsv"
     output:
         f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxonomy.tsv"
+    params:
+        api_key = NCBI_API_KEY
     conda:
         f"{HOME_DIR}/env/ncbi-datasets.yaml"
     shell:
@@ -141,19 +144,51 @@ rule fetch_taxonomy:
         accession=$(awk -F '\\t' '{{print $1}}' {input.taxid_info})
         tax_id=$(awk -F '\\t' '{{print $2}}' {input.taxid_info})
 
-        echo "Processing accession: $accession"
-        echo "Extracted TaxID: $tax_id"
-
         if [ "$tax_id" = "NA" ] || [ -z "$tax_id" ]; then
+
             echo -e "$accession\\tNA\\tNA\\tNA\\tNA\\tNA\\tNA\\tNA" > {output}
+
+        elif [ -n "{params.api_key}" ]; then
+
+            sleep $(awk -v min=1 -v max=30 'BEGIN{{srand(); print min+rand()*(max-min)}}')
+
+            echo "Using API key for NCBI Datasets: {params.api_key}"
+            datasets summary taxonomy taxon $tax_id --api-key {params.api_key}\\
+            | jq -r '
+                if .reports and (.reports | length > 0) then
+                    [
+                      "accession\\ttax_id\\tscientific_name\\trank\\tkingdom\\tphylum\\tclass\\torder\\tfamily",
+                      (.reports[] | if (.taxonomy // empty) then
+                          [
+                              "'"$accession"'", 
+                              (.taxonomy.tax_id // "NA"),
+                              (.taxonomy.current_scientific_name.name // "NA"),
+                              (.taxonomy.rank // "NA"),
+                              (.taxonomy.classification.kingdom.name // "NA"),
+                              (.taxonomy.classification.phylum.name // "NA"),
+                              (.taxonomy.classification.class.name // "NA"),
+                              (.taxonomy.classification.order.name // "NA"),
+                              (.taxonomy.classification.family.name // "NA")
+                          ]
+                      else
+                          ["$accession", "$tax_id", "NA", "NA", "NA", "NA", "NA", "NA"]
+                      end | @tsv)
+                    ]
+                else
+                    "$accession\\t$tax_id\\tNA\\tNA\\tNA\\tNA\\tNA\\tNA"
+                end
+            ' > {output}
         else
+            sleep $(awk -v min=0.5 -v max=15 'BEGIN{{srand(); print min+rand()*(max-min)}}')
+
             datasets summary taxonomy taxon $tax_id \\
             | jq -r '
                 if .reports and (.reports | length > 0) then
                     [
-                      "tax_id\\tscientific_name\\trank\\tkingdom\\tphylum\\tclass\\torder\\tfamily",
+                      "accession\\tax_id\\tscientific_name\\trank\\tkingdom\\tphylum\\tclass\\torder\\tfamily",
                       (.reports[] | if (.taxonomy // empty) then
                           [
+                              "'"$accession"'", 
                               (.taxonomy.tax_id // "NA"),
                               (.taxonomy.current_scientific_name.name // "NA"),
                               (.taxonomy.rank // "NA"),
