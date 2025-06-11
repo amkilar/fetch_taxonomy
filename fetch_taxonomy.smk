@@ -26,27 +26,27 @@ rule all:
 ###############################################################################
 checkpoint list_accessions:
     """
-    Collect all directories in INPUT_GENOMES and write them to assemblies.txt.
+    Collect accession IDs and write them to assemblies.txt.
     """
     input:
         directory = INPUT_GENOMES
     output:
         assemblies = f"{OUTPUT_TAXONOMY}/assemblies.txt"
     run:
-        with open(output[0], 'w') as outfile:
-            for dirname in os.listdir(input.directory):
-                dirpath = os.path.join(input.directory, dirname)
-                if os.path.isdir(dirpath) and (dirname.startswith("GCA_") or dirname.startswith("GCF_")):
-                    outfile.write(dirname + '\n')
-                    print(f"Found assembly: {dirname}")
+        accession_pattern = re.compile(r"^(GCA|GCF)_\d+\.\d+")
+        found = set()
 
-        if os.path.getsize(output.assemblies) == 0:
-            raise ValueError(
-                f"No directories found in {input.directory}. "
-                "Ensure your genome directories are copied properly."
-            )
+        for entry in os.listdir(input.directory):
+            match = accession_pattern.match(entry)
+            if match:
+                found.add(match.group(0))
 
+        if not found:
+            raise ValueError("No valid accessions found.")
 
+        with open(output.assemblies, 'w') as out:
+            for acc in sorted(found):
+                out.write(acc + "\n")
 ###############################################################################
 #  Function: get_accessions_from_checkpoint
 #    Reads assemblies.txt AFTER the checkpoint is done
@@ -57,7 +57,16 @@ def get_accessions_from_checkpoint(wildcards):
     with open(ck.output.assemblies) as f:
         return [line.strip() for line in f]
 
+def get_genome_path(accession):
+    import re
+    import os
 
+    accession_pattern = re.compile(r"^(GCA|GCF)_\d+\.\d+")
+    for entry in os.listdir(INPUT_GENOMES):
+        match = accession_pattern.match(entry)
+        if match and match.group(0) == accession:
+            return os.path.join(INPUT_GENOMES, entry)
+    return None
 ###############################################################################
 # Rule: fetch_taxid (runs one job per accession)
 ###############################################################################
@@ -251,8 +260,15 @@ rule organize_by_taxonomy:
         import pandas as pd
         import glob
 
-        # Validate input and find the correct genome file
-        genome_files = glob.glob(f"{INPUT_GENOMES}/{wildcards.accession}/*_genomic.fna")
+
+        genome_entry_path = get_genome_path(wildcards.accession)
+
+        genome_files = []
+        if genome_entry_path:
+            if os.path.isdir(genome_entry_path):
+                genome_files = glob.glob(f"{genome_entry_path}/*_genomic.fna")
+            elif genome_entry_path.endswith(".fna"):
+                genome_files = [genome_entry_path]
         
         if not genome_files:
             print(f"Genome file for {wildcards.accession} is missing or not a `.fna` file. Skipping.")
