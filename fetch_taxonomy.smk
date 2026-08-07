@@ -9,9 +9,37 @@ NCBI_API_KEY = config.get("ncbi_api_key", "")
 
 os.makedirs(OUTPUT_TAXONOMY, exist_ok=True)
 
-
 if not NCBI_API_KEY:
     print("Warning: No NCBI API key found! Limiting requests to 5 at a time. Set `ncbi_api_key` in config.yaml to increase the limit to 10.")
+
+###############################################################################
+# Resolve accessions ONCE at parse time (no checkpoint needed: the genome
+# directories already exist on disk before the pipeline starts, so there is
+# nothing "dynamic" here for Snakemake to defer until runtime).
+###############################################################################
+ACCESSIONS = sorted(
+    d for d in os.listdir(INPUT_GENOMES)
+    if os.path.isdir(os.path.join(INPUT_GENOMES, d)) and (d.startswith("GCA_") or d.startswith("GCF_"))
+)
+
+if not ACCESSIONS:
+    raise ValueError(
+        f"No GCA_/GCF_ directories found in {INPUT_GENOMES}. "
+        "Ensure your genome directories are copied properly."
+    )
+
+print(f"Found {len(ACCESSIONS)} assemblies in {INPUT_GENOMES}")
+
+# Also write assemblies.txt for anyone/anything downstream that expects it
+# (kept for backward compatibility / manual inspection; no longer a checkpoint output)
+_assemblies_path = f"{OUTPUT_TAXONOMY}/assemblies.txt"
+os.makedirs(os.path.dirname(_assemblies_path), exist_ok=True)
+with open(_assemblies_path, "w") as f:
+    for acc in ACCESSIONS:
+        f.write(acc + "\n")
+
+wildcard_constraints:
+    accession = r"GC[AF]_\d+\.\d+"
 
 ###############################################################################
 # rule all
@@ -22,52 +50,6 @@ rule all:
         f"{OUTPUT_TAXONOMY}/taxonomy_creation.log"
 
 ###############################################################################
-# CHECKPOINT: list_accessions
-###############################################################################
-checkpoint list_accessions:
-    """
-    Collect accession IDs and write them to assemblies.txt.
-    """
-    input:
-        directory = INPUT_GENOMES
-    output:
-        assemblies = f"{OUTPUT_TAXONOMY}/assemblies.txt"
-    run:
-        accession_pattern = re.compile(r"^(GCA|GCF)_\d+\.\d+")
-        found = set()
-
-        for entry in os.listdir(input.directory):
-            match = accession_pattern.match(entry)
-            if match:
-                found.add(match.group(0))
-
-        if not found:
-            raise ValueError("No valid accessions found.")
-
-        with open(output.assemblies, 'w') as out:
-            for acc in sorted(found):
-                out.write(acc + "\n")
-###############################################################################
-#  Function: get_accessions_from_checkpoint
-#    Reads assemblies.txt AFTER the checkpoint is done
-###############################################################################
-def get_accessions_from_checkpoint(wildcards):
-    # "get" the checkpoint object so we can see its outputs
-    ck = checkpoints.list_accessions.get()
-    with open(ck.output.assemblies) as f:
-        return [line.strip() for line in f]
-
-def get_genome_path(accession):
-    import re
-    import os
-
-    accession_pattern = re.compile(r"^(GCA|GCF)_\d+\.\d+")
-    for entry in os.listdir(INPUT_GENOMES):
-        match = accession_pattern.match(entry)
-        if match and match.group(0) == accession:
-            return os.path.join(INPUT_GENOMES, entry)
-    return None
-###############################################################################
 # Rule: fetch_taxid (runs one job per accession)
 ###############################################################################
 rule fetch_taxid:
@@ -75,10 +57,6 @@ rule fetch_taxid:
     For each discovered directory name (treated as an accession),
     fetch the TaxID and organism name from NCBI Datasets.
     """
-    # Because we have a wildcard {accession}, Snakemake will create a job
-    # for each item returned by get_accessions_from_checkpoint.
-    input:
-        assemblies=lambda wc: checkpoints.list_accessions.get().output.assemblies
     output:
         f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxid.tsv"
     params:
@@ -194,7 +172,7 @@ rule fetch_taxonomy:
             | jq -r '
                 if .reports and (.reports | length > 0) then
                     [
-                      "accession\\tax_id\\tscientific_name\\trank\\tkingdom\\tphylum\\tclass\\torder\\tfamily",
+                      "accession\\ttax_id\\tscientific_name\\trank\\tkingdom\\tphylum\\tclass\\torder\\tfamily",
                       (.reports[] | if (.taxonomy // empty) then
                           [
                               "'"$accession"'", 
@@ -217,7 +195,6 @@ rule fetch_taxonomy:
             ' > {output}
         fi
         """
-
 
 ###############################################################################
 # Rule: clean_taxonomy_output
@@ -251,7 +228,6 @@ rule organize_by_taxonomy:
     Create symbolic links for genome files based on their taxonomy (Kingdom/Phylum/Class/Order/Family).
     """
     input:
-        genome_file = lambda wc: checkpoints.list_accessions.get().output.assemblies,
         taxonomy_file = f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxonomy_cleaned.tsv"
     output:
         temp(f"{OUTPUT_TAXONOMY}/organized/{{accession}}/linked.flag")
@@ -260,18 +236,11 @@ rule organize_by_taxonomy:
         import pandas as pd
         import glob
 
+        # Validate input and find the correct genome file
+        genome_files = glob.glob(f"{INPUT_GENOMES}/{wildcards.accession}/*_genomic.fna*")
 
-        genome_entry_path = get_genome_path(wildcards.accession)
-
-        genome_files = []
-        if genome_entry_path:
-            if os.path.isdir(genome_entry_path):
-                genome_files = glob.glob(f"{genome_entry_path}/*_genomic.fna")
-            elif genome_entry_path.endswith(".fna"):
-                genome_files = [genome_entry_path]
-        
         if not genome_files:
-            print(f"Genome file for {wildcards.accession} is missing or not a `.fna` file. Skipping.")
+            print(f"Genome file for {wildcards.accession} is missing or not a `.fna*` file. Skipping.")
             with open(output[0], 'w') as f:
                 f.write(f"Skipped {wildcards.accession} due to missing or incorrect genome file.\n")
             return
@@ -315,7 +284,7 @@ rule log_symlink_creation:
     Aggregate symlink creation statuses into a single log file.
     """
     input:
-        expand(f"{OUTPUT_TAXONOMY}/organized/{{accession}}/linked.flag", accession=get_accessions_from_checkpoint)
+        expand(f"{OUTPUT_TAXONOMY}/organized/{{accession}}/linked.flag", accession=ACCESSIONS)
     output:
         log_file = f"{OUTPUT_TAXONOMY}/taxonomy_creation.log"
     run:
@@ -335,11 +304,9 @@ rule merge_results:
     Merge the cleaned taxonomy files into a final comprehensive TSV table.
     """
     input:
-        # This references the expansions from the checkpoint, so we
-        # only run on the actual discovered directories.
         expand(
             f"{OUTPUT_TAXONOMY}/results/{{accession}}_taxonomy_cleaned.tsv",
-            accession=get_accessions_from_checkpoint
+            accession=ACCESSIONS
         )
     output:
         f"{OUTPUT_TAXONOMY}/{OUTPUT_TAXONOMY_NAME}_taxonomy_table.tsv"
